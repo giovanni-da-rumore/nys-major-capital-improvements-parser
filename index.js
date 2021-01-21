@@ -1,7 +1,5 @@
 const fs = require('fs') 
 
-const hubFile = fs.readFileSync(`${__dirname}/HUBC137_P530.TXT`, 'utf-8')
-
 
 function isDocketNum(item) {
     if (item.length < 9 || item.length > 10) return false
@@ -16,9 +14,8 @@ function isDocketNum(item) {
     return true
 }
 
-// console.log(isDocketNum('LOBBY DOOR'))
 function isBldgId(item) {
-    return item.length === 6 && !isNaN(item)
+    return (item.length === 6 || item.length === 7) && !isNaN(item)
 }
 
 function parseMCItems(line) {
@@ -40,20 +37,23 @@ function parseFile(file) {
     let currentBaseLine = []
     let currentDocketLine = []
     let firstDocketLine = false
-    let testingIdx = 0
+    // let testingIdx = 0
+    let testLog = false
     let pauseForPageBreak = false
     let currentIdx = 0
     let haveError = false
 
     file.split('\n').forEach((line, idx) => {
-        // if (testingIdx > 2) return
+        // dont bother parsing if theres an error
         if (haveError) return
-        const parsedLine = line.trim().split(/\s\s+/);
 
+        const parsedLine = line.trim().split(/\s\s+/);
+        // this means there's a page break, so pause collection until...
         if (parsedLine[0] === '*** D R A F T') {
             pauseForPageBreak = true;
             return;
         }
+        // ...page break ends
         if (pauseForPageBreak) {
             if (parsedLine[0] === '--------------------') {
                 pauseForPageBreak = false
@@ -63,14 +63,16 @@ function parseFile(file) {
         // there are many blank lines in the doc, ignore them
         if (parsedLine.length === 1) return
 
-    
+        // begin a new line/group when you find a buildingID
         if (isBldgId(parsedLine[0])) {
-            // testingIdx++
             if (parsedLine.length === 2) {
-                currentBaseLine = parsedLine;
+                // add old lines, now that you know they've completed
                 allLines.push(...currentLines)
+                // clear data and start new lines
+                currentBaseLine = parsedLine;
                 currentLines = []
                 currentIdx = 0
+                // prepare to collect address & most data in the next line
                 addressBreak = true;
                 makingLine = true
             } else {
@@ -79,95 +81,73 @@ function parseFile(file) {
             }
             return 
         }
-    
-    
+        // dont do anything if you're still at the beginning of a file
+        if (!makingLine) return
+
+        // every initial line has a break in its address
         if (addressBreak) {
             // add to baseline, i.e. finish its second element 
             currentBaseLine[1] += ` ${parsedLine[0]}`.split(',').join('')
-
             if (parsedLine.length === 9) {
                 // if claim is still open, line doesn't have
                 // closed date nor Close Code
-                parsedLine.splice(8, 0, '999')
+                parsedLine.splice(8, 0, 'N/A')
                 parsedLine.splice(9, 0, 'NONE')
 
             }
-            // if (currentBaseLine[0] === '214433') {
-            //     console.log('breaking line')
-            //     console.log(parsedLine)
-            //     console.log(parsedLine.length)
-            //     parsedLine.splice(8, 0, '999')
-            //     parsedLine.splice(9, 0, 'NONE')
-            //     console.log(parsedLine)
-            // } 
-            // if (currentBaseLine[0] === '206718') {
-            //     console.log('normal line')
-            //     console.log(parsedLine)
-            //     console.log(parsedLine[9])
-            //     console.log(parsedLine.length)
-            // }
             // make zip code its own column & add
             // rg & rc count to currentBaseLine
             currentBaseLine = currentBaseLine.concat(parsedLine.slice(1, 4))
-            // after basesline (ends idx 3, rc count) add docket info to current line and make docket line
+            // after basesline (ends idx 3, rc count) add docket info to current line to make a docket line
             currentDocketLine = [...currentBaseLine, ...parsedLine.slice(4)]
-            // console.log('docket line is', currentDocketLine)
             // currentIdx should be 0
             currentLines[currentIdx] = currentDocketLine
-            // console.log('test current lines', currentLines)
             addressBreak = false
             firstDocketLine = true
             return
         }
-    
-        if (makingLine) {
-            // start new line if new docket number
-            if (isDocketNum(parsedLine[0])) {
-                // console.log('new docket line')
-                // means claim is open, so add extra space for 
-                if (parsedLine.length === 6) {
-                    parsedLine.splice(4, 0, 999)
-                }
-                currentDocketLine = currentBaseLine.concat(parsedLine)
-                currentLines.push(currentDocketLine)
-                firstDocketLine = true
-                // do docket stuff later
+        // see if items are under a new doocket number, and if so, update accordingly
+        if (isDocketNum(parsedLine[0])) {
+            // this length means claim is open, so add extra space for close date
+            if (parsedLine.length === 6) {
+                parsedLine.splice(4, 0, 'N/A')
+            }
+            currentDocketLine = currentBaseLine.concat(parsedLine)
+            currentLines.push(currentDocketLine)            
+            // move idx to next line, so can add new mc items to it if need be
+            currentIdx++
+            firstDocketLine = true
+
+        } else {
+            // if not, add individual items to existing docket number
+            const mcItems = parseMCItems(parsedLine)
+            // if first instance of a docket number, append data to the end of the line
+            if (firstDocketLine) {
+                firstDocketLine = false
+                currentLines[currentIdx] = currentLines[currentIdx].concat(mcItems)
             } else {
-                const mcItems = parseMCItems(parsedLine)
-                if (firstDocketLine) {
-                    // console.log('i shold be called')
-                    // console.log('mc itemss', mcItems)
-                    // console.log('current line', currentLines[currentIdx])
-                    firstDocketLine = false
-                    // console.log('currentLines for', currentLines)
-                    // console.log(currentIdx)
-                    // console.log(idx)
-                    // console.log(mcItems)
-                    // console.log(currentDocketLine)
-                    currentLines[currentIdx] = currentLines[currentIdx].concat(mcItems)
-                } else {
-                    currentLines.push(currentDocketLine.concat(mcItems))
-                }
+            // otherwise, make another row for this docket number and specific item
+                currentLines.push(currentDocketLine.concat(mcItems))
                 currentIdx++
             }
         }
     })
+    // catch remaining lines and add them to list
     if (currentLines.length) {
-        console.log('leftover lines', currentLines)
-        // add remaining lines here
+        allLines.push(...currentLines)
     }
     return allLines
 }
 
 
-function writeToCSV(data) {
+function writeToCSV(data, fileName = 'parsedData') {
     const header = [
         'BLDG ID', 'STREET ADDRESS', 'ZIP CODE', 'LAST REG', 'RC COUNT', 
         'DOCKET NO', 'CASE TYPE', 'CASE STATUS', 'FILING DATE',
         'CLOSING DATE', 'CLOSE CODE', 'STAFF ID', 'MCI ITEM',
         'CLAIM COST', 'ALLOW COST', 'WK BEG DT'
     ]
-    const outputFile = fs.createWriteStream("parsedHubData.csv");
+    const outputFile = fs.createWriteStream(`csvs/${fileName}.csv`);
     outputFile.on('error', function(err) { console.log('writing error', err)});
     outputFile.write(header.join(', ') + '\r\n')
     data.forEach(function(v) { 
@@ -176,36 +156,35 @@ function writeToCSV(data) {
     outputFile.end();
 }
 
-// parseFile(hubFile)
-
+// const hubFile = fs.readFileSync(`${__dirname}/HUBC137_P530.TXT`, 'utf-8')
 // console.log(parseFile(hubFile))
-const parsedData = parseFile(hubFile)
-writeToCSV(parsedData)
+// const parsedData = parseFile(hubFile)
+// writeToCSV(parsedData)
+
+    
+    
+function convertFilesToCSV(fileNames, directory = 'textFiles', ext = 'TXT') {
+    fileNames.forEach((fileName) => {
+        const hubFile = fs.readFileSync(`${__dirname}/${directory}/${fileName}.${ext}`, 'utf-8')
+        const parsedData = parseFile(hubFile)
+        debugger
+        if (parsedData) {
+            writeToCSV(parsedData, fileName)
+        }
+    })
+}
+
+// to parse files, simply add file names to this list and run the file. 
+// Each file will output to a csv with the same name 
+const fileNames = [
+    'HUBC137_P530', 
+    'HUBC137_P531', 
+    'HUBC137_P532',
+    'HUBC137_P533',
+    'HUBC137_P534'
+]
+
+// console.log(isDocketNum('EW110073OM'))
+convertFilesToCSV(fileNames)
 
 
-
-// fs.readFile(hubFile, (err, data) => { 
-//     if (err) throw err; 
-  
-//     console.log(data.toString()); 
-// }) 
-// function readTextFile(file) {
-//     var rawFile = new XMLHttpRequest();
-//     rawFile.open("GET", file, false);
-//     rawFile.onreadystatechange = function ()
-//     {
-//         if(rawFile.readyState === 4)
-//         {
-//             if(rawFile.status === 200 || rawFile.status == 0)
-//             {
-//                 var allText = rawFile.responseText;
-//                 alert(allText);
-//             }
-//         }
-//     }
-//     rawFile.send(null);
-// }
-
-
-// const myFile = readTextFile('/Users/jeremylilly/Documents/javascript/hub_stuff/HUBC137_P530.TXT')
-// console.log(myFile)
