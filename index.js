@@ -2,15 +2,13 @@ const fs = require('fs')
 
 
 function isDocketNum(item) {
+    // test to see if item is close enough to pattern, e.g. BX630003X or GM610075OM
     if (item.length < 9 || item.length > 10) return false
+    // letter, letter, number, number
     if (!isNaN(item[0])) return false
     if (!isNaN(item[1])) return false
     if (isNaN(item[2])) return false
     if (isNaN(item[3])) return false
-    // close enough to pattern, e.g. 
-    // BX630003X
-    // GM610075OM
-    // letter, letter, number, number
     return true
 }
 
@@ -26,7 +24,31 @@ function parseMCItems(line) {
         newLine.splice(2, 0, '0')
         // return newLine.slice(0, 2).concat([0, newLine[2]])
     }
+    if (newLine.length === 5) {
+        // in some cases, there are two spaces between words in the description column, so they
+        // get split into two columns. Put them back together. 
+        const beginning = newLine.shift()
+        newLine[0] = `${beginning} ${newLine[0]}`
+        // Note, might want to check if you change files, but proved for these specific files
+        // that all mcitems of length 5 have an unwanted split for their first column
+    }
     return newLine
+}
+
+function checkAndFillDocketLine(line, startIdx) {
+    // fill in N/A for missing items, can be closed date, close code or both
+    if (line.length === 9) {
+        // in this case, docket is in first and missing close date and close code and 
+        line.splice(8, 0, 'N/A')
+        line.splice(9, 0, 'NONE')
+    } else if (line.length === 6) {
+        //  docket line is by self and missing close date
+        line.splice(4, 0, 'N/A')
+    } else if (line.length === 5) {
+        // docket line is by self and missing close date and close code
+        line.splice(4, 0, 'N/A')
+        line.splice(5, 0, 'NONE')
+    }
 }
 
 function parseFile(file) {
@@ -86,19 +108,13 @@ function parseFile(file) {
 
         // every initial line has a break in its address
         if (addressBreak) {
-            // add to baseline, i.e. finish its second element 
+            // add to baseline, i.e. finish its second element. Split on comma so state isn't its own colum
             currentBaseLine[1] += ` ${parsedLine[0]}`.split(',').join('')
-            if (parsedLine.length === 9) {
-                // if claim is still open, line doesn't have
-                // closed date nor Close Code
-                parsedLine.splice(8, 0, 'N/A')
-                parsedLine.splice(9, 0, 'NONE')
-
-            }
-            // make zip code its own column & add
-            // rg & rc count to currentBaseLine
+            // if claim is still open, line is might be missing some elements that need filled in for csv
+            checkAndFillDocketLine(parsedLine)
+            // make zip code its own column & add rg & rc count to currentBaseLine
             currentBaseLine = currentBaseLine.concat(parsedLine.slice(1, 4))
-            // after basesline (ends idx 3, rc count) add docket info to current line to make a docket line
+            // after basesline ends (idx 3, rc count), add docket info to current line and make base docket line
             currentDocketLine = [...currentBaseLine, ...parsedLine.slice(4)]
             // currentIdx should be 0
             currentLines[currentIdx] = currentDocketLine
@@ -109,9 +125,19 @@ function parseFile(file) {
         // see if items are under a new doocket number, and if so, update accordingly
         if (isDocketNum(parsedLine[0])) {
             // this length means claim is open, so add extra space for close date
-            if (parsedLine.length === 6) {
-                parsedLine.splice(4, 0, 'N/A')
-            }
+            // if (parsedLine.length === 6) {
+            //     parsedLine.splice(4, 0, 'N/A')
+            // } else if (parsedLine = 5) {
+
+            // }
+            checkAndFillDocketLine(parsedLine)
+
+            // if (parsedLine[0] === 'BU210010OM') {
+            //     console.log('herer we are')
+            //     console.log('old line', currentLines)
+            //     console.log('cur line', currentBaseLine)
+            //     console.log(parsedLine)
+            // }
             currentDocketLine = currentBaseLine.concat(parsedLine)
             currentLines.push(currentDocketLine)            
             // move idx to next line, so can add new mc items to it if need be
@@ -125,6 +151,9 @@ function parseFile(file) {
             if (firstDocketLine) {
                 firstDocketLine = false
                 currentLines[currentIdx] = currentLines[currentIdx].concat(mcItems)
+                if (currentLines[currentIdx].length === 17) {
+                    console.log(parsedLine)
+                }
             } else {
             // otherwise, make another row for this docket number and specific item
                 currentLines.push(currentDocketLine.concat(mcItems))
@@ -167,7 +196,6 @@ function convertFilesToCSV(fileNames, directory = 'textFiles', ext = 'TXT') {
     fileNames.forEach((fileName) => {
         const hubFile = fs.readFileSync(`${__dirname}/${directory}/${fileName}.${ext}`, 'utf-8')
         const parsedData = parseFile(hubFile)
-        debugger
         if (parsedData) {
             writeToCSV(parsedData, fileName)
         }
