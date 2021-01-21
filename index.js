@@ -124,20 +124,7 @@ function parseFile(file) {
         }
         // see if items are under a new doocket number, and if so, update accordingly
         if (isDocketNum(parsedLine[0])) {
-            // this length means claim is open, so add extra space for close date
-            // if (parsedLine.length === 6) {
-            //     parsedLine.splice(4, 0, 'N/A')
-            // } else if (parsedLine = 5) {
-
-            // }
             checkAndFillDocketLine(parsedLine)
-
-            // if (parsedLine[0] === 'BU210010OM') {
-            //     console.log('herer we are')
-            //     console.log('old line', currentLines)
-            //     console.log('cur line', currentBaseLine)
-            //     console.log(parsedLine)
-            // }
             currentDocketLine = currentBaseLine.concat(parsedLine)
             currentLines.push(currentDocketLine)            
             // move idx to next line, so can add new mc items to it if need be
@@ -185,13 +172,7 @@ function writeToCSV(data, fileName = 'parsedData') {
     outputFile.end();
 }
 
-// const hubFile = fs.readFileSync(`${__dirname}/HUBC137_P530.TXT`, 'utf-8')
-// console.log(parseFile(hubFile))
-// const parsedData = parseFile(hubFile)
-// writeToCSV(parsedData)
 
-    
-    
 function convertFilesToCSV(fileNames, directory = 'textFiles', ext = 'TXT') {
     fileNames.forEach((fileName) => {
         const hubFile = fs.readFileSync(`${__dirname}/${directory}/${fileName}.${ext}`, 'utf-8')
@@ -212,7 +193,6 @@ const fileNames = [
     'HUBC137_P534'
 ]
 
-// console.log(isDocketNum('EW110073OM'))
 convertFilesToCSV(fileNames)
 
 
