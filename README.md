@@ -1,2 +1,2 @@
 # nys-major-capital-improvements-parser
-Converts New York State data on Housing Major Capital Improvements Cases to CSV files
+Converts NYS data on major capital improvements cases (for housing) to CSV files
