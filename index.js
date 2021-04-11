@@ -166,8 +166,12 @@ function writeToCSV(data, fileName = 'parsedData') {
     const outputFile = fs.createWriteStream(`csvs/${fileName}.csv`);
     outputFile.on('error', function(err) { console.log('writing error', err)});
     outputFile.write(header.join(', ') + '\r\n')
-    data.forEach(function(v) { 
-        outputFile.write(v.join(', ') + '\r\n'); 
+    data.forEach(function(row, index) {
+        // fix oddly formatted addresses (mostly in Queens) so they work with nyc gov's geocode API
+        if (row[1].split(' TO ').length > 1) {
+            row[1] = row[1].split(' TO ')[1]
+        }
+        outputFile.write(row.join(', ') + '\r\n'); 
     });
     outputFile.end();
 }
@@ -194,5 +198,6 @@ const fileNames = [
 ]
 
 convertFilesToCSV(fileNames)
+
 
 
