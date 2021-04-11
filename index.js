@@ -1,6 +1,5 @@
 const fs = require('fs') 
 
-
 function isDocketNum(item) {
     // test to see if item is close enough to pattern, e.g. BX630003X or GM610075OM
     if (item.length < 9 || item.length > 10) return false
